@@ -142,7 +142,7 @@ class TwoLayerNet(object):
 
     # Calculate dx2 and backprop to calculate dRelu1.
     dx2 = np.dot(dSoftmax, W2.T) #  (N, C) * (C, H)
-    relu_mask = (relu_1_activation > 0)
+    relu_mask = (relu_1_activation > 0) # relu_mask is local derivative of relu function
     dRelu1= relu_mask*dx2
 
     # Backprop dRelu1 to calculate dW1 and add regularisation derivative.

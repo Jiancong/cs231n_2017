@@ -146,7 +146,7 @@ class Solver(object):
 
         self._reset()
 
-
+    # don't call this manually.
     def _reset(self):
         """
         Set up some book-keeping variables for optimization. Don't call this
@@ -166,7 +166,7 @@ class Solver(object):
             d = {k: v for k, v in self.optim_config.items()}
             self.optim_configs[p] = d
 
-
+    # should not be called manually.
     def _step(self):
         """
         Make a single gradient update. This is called by train() and should not
