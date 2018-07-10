@@ -180,16 +180,26 @@ class FullyConnectedNet(object):
         # beta2, etc. Scale parameters should be initialized to one and shift      #
         # parameters should be initialized to zero.                                #
         ############################################################################
-        for i in range(self.num_layers):
-            if i == 0:
-                self.params['W1'] = np.random.normal(scale=weight_scale, size=(input_dim,  hidden_dims[0]))
-                self.params['b1'] = np.zeros(hidden_dims[0])
-            elif i == self.num_layers-1:
-                self.params['W' + str(i+1)] = np.random.normal(scale=weight_scale, size=(hidden_dims[i-1], num_classes))
-                self.params['b' + str(i+1)] = np.zeros(num_classes)
-            else:
-                self.params['W'+str(i+1)] = np.random.normal(scale=weight_scale, size=(hidden_dims[i-1], hidden_dims[i]))
-                self.params['b'+str(i+1)] = np.zeros(hidden_dims[i])
+        #print("Init...")
+        for i in range(self.num_layers-1):
+            #print("i+1=>", str(i+1))
+            if self.use_batchnorm:
+                self.params['beta' + str(i+1)] = np.zeros([hidden_dims[i]])
+                self.params['gamma' + str(i+1)] = np.ones([hidden_dims[i]])
+
+            self.params['W'+str(i+1)] = np.random.normal(scale=weight_scale, size=(input_dim, hidden_dims[i]))
+            self.params['b'+str(i+1)] = np.zeros(hidden_dims[i])
+            input_dim = hidden_dims[i]  # Set the input dim of next layer to be output dim of current layer.
+            #print('W', str(i+1), '.shape=>', self.params['W'+ str(i+1)].shape)
+            #print('b', str(i+1), '.shape=>', self.params['b'+ str(i+1)].shape)
+            #print('gamma', str(i+1), '.shape=>', self.params['gamma'+ str(i+1)].shape)
+            #print('beta', str(i+1), '.shape=>', self.params['beta'+ str(i+1)].shape)
+
+        self.params['W' + str(self.num_layers)] = np.random.normal(scale=weight_scale, size=(input_dim, num_classes))
+        self.params['b' + str(self.num_layers)] = np.zeros(num_classes)
+
+        #print('W', str(self.num_layers), '.shape=>', self.params['W'+ str(self.num_layers)].shape)
+        #print('b', str(self.num_layers), '.shape=>', self.params['b'+ str(self.num_layers)].shape)
 
         ############################################################################
         #                             END OF YOUR CODE                             #
@@ -248,25 +258,45 @@ class FullyConnectedNet(object):
         # self.bn_params[1] to the forward pass for the second batch normalization #
         # layer, etc.                                                              #
         ############################################################################
-        out_array = []
-        cache_array = []
-        for i in range(self.num_layers):
-            W = self.params['W'+str(i+1)]
-            b = self.params['b'+str(i+1)]
-            if i == 0:
-                o, c = affine_relu_forward(X, W, b)
-                out_array.append(np.copy(o))
-                cache_array.append(np.copy(c))
-            elif i == self.num_layers-1:
-                o, c = affine_forward(out_array[i-1], W, b)
-                out_array.append(np.copy(o))
-                cache_array.append(np.copy(c))
-            else:
-                o, c = affine_relu_forward(out_array[i-1], W, b)
-                out_array.append(np.copy(o))
-                cache_array.append(np.copy(c))
-            #print("o=>", o)
-        scores = np.copy(out_array[-1])
+        fc_cache = {}
+        relu_cache = {}
+        bn_cache = {}
+        dropout_cache = {}
+        batch_size = X.shape[0]
+
+        cache_array=[]
+        out_array=[]
+
+        #X = np.reshape(X, [batch_size, -1])  # Flatten our input images.
+
+        # Do as many Affine-Relu forward passes as required (num_layers - 1).
+        # Apply batch norm and dropout as required.
+        #print("forward path...")
+        for i in range(self.num_layers - 1):
+            #print("i+1=>", str(i+1))
+            # fc_cache start from 1
+            fc_act, fc_cache[str(i+1)] = affine_forward(X, self.params['W'+str(i+1)], self.params['b'+str(i+1)])
+
+            if self.use_batchnorm:
+
+                # bn_cache start from 1
+                bn_act, bn_cache[str(i+1)] = batchnorm_forward(fc_act, self.params['gamma'+str(i+1)], self.params['beta'+str(i+1)], self.bn_params[i])
+
+                # relu_cache start from 1
+                relu_act, relu_cache[str(i+1)] = relu_forward(bn_act)
+            else:            
+                relu_act, relu_cache[str(i+1)] = relu_forward(fc_act)
+
+            X = relu_act.copy() # Result of one pass through the affine-relu block.
+
+            cache = (fc_cache[str(i+1)], relu_cache[str(i+1)])
+
+            out_array.append(np.copy(relu_act))
+
+            cache_array.append(np.copy(cache))
+
+        # Final output layer is FC layer with no relu.
+        scores, final_cache = affine_forward(X, self.params['W'+str(self.num_layers)], self.params['b'+str(self.num_layers)])
         #print("scores=>", scores)
 
         ############################################################################
@@ -280,9 +310,7 @@ class FullyConnectedNet(object):
         loss, grads = 0.0, {}
 
         loss, dscores = softmax_loss(scores, y)
-        for i in range(self.num_layers):
-            W = self.params['W' + str(i+1)]
-            loss += 0.5*self.reg*np.sum(W ** 2)
+        loss += 0.5*self.reg*(np.sum(self.params['W'+str(self.num_layers)] ** 2))
 
         ############################################################################
         # TODO: Implement the backward pass for the fully-connected net. Store the #
@@ -297,15 +325,41 @@ class FullyConnectedNet(object):
         # automated tests, make sure that your L2 regularization includes a factor #
         # of 0.5 to simplify the expression for the gradient.                      #
         ############################################################################
-        for i in reversed(range(self.num_layers)):
-            if i == self.num_layers-1:
-                dx, grads['W'+ str(i+1)], grads['b'+str(i+1)] = affine_backward(dscores, cache_array[i])
-                grads['W' + str(i+1)] += self.reg*self.params['W'+str(i+1)]
-                dx_old = np.copy(dx)
+
+        #print("backward...")
+        # Backprop dsoft to the last FC layer to calculate gradients.
+        dx_last, dw_last, db_last = affine_backward(dscores, final_cache)
+
+        # Store gradients of the last FC layer
+        grads['W'+str(self.num_layers)] = dw_last + self.reg*self.params['W'+str(self.num_layers)]
+        grads['b'+str(self.num_layers)] = db_last
+#        print("grads[W",str(self.num_layers), "].shape=>", grads['W'+ str(self.num_layers)].shape)
+#        print("grads[b",str(self.num_layers), "].shape=>", grads['b'+ str(self.num_layers)].shape)
+
+        for i in reversed(range(self.num_layers-1)):
+#            print("i+1=>", i+1)
+
+            #print("dx_last.shape=>", dx_last.shape)
+            #print("relu_cache.shape=>", relu_cache[str(i+1)].shape)
+            drelu = relu_backward(dx_last, relu_cache[str(i+1)])
+
+            if self.use_batchnorm:
+                dbatchnorm, dgamma, dbeta = batchnorm_backward(drelu, bn_cache[str(i+1)])
+                dx_last, dw_last, db_last = affine_backward(dbatchnorm, fc_cache[str(i+1)])
+                grads['beta' + str(i+1)] = dbeta
+                grads['gamma' + str(i+1)] = dgamma
             else:
-                dx, grads['W' + str(i+1)], grads['b'+str(i+1)] = affine_relu_backward(dx_old, cache_array[i])
-                grads['W' + str(i+1)] += self.reg*self.params['W'+str(i+1)]
-                dx_old = np.copy(dx)
+                dx_last, dw_last, db_last = affine_backward(drelu, fc_cache[str(i+1)])
+
+            grads['W'+str(i+1)] = dw_last
+            grads['W' + str(i+1)] += self.reg*self.params['W'+str(i+1)]
+            grads['b' + str(i+1)] = db_last
+
+#            print("grads[W",str(i+1), "].shape=>", grads['W'+ str(i+1)].shape)
+#            print("grads[b",str(i+1), "].shape=>", grads['b'+ str(i+1)].shape)
+
+            # Add reg. loss for each other FC layer.
+            loss += 0.5 * self.reg * (np.sum(self.params['W' + str(i+1)]**2))
 
         ############################################################################
         #                             END OF YOUR CODE                             #
