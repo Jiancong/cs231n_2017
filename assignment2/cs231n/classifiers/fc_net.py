@@ -287,6 +287,10 @@ class FullyConnectedNet(object):
             else:            
                 relu_act, relu_cache[str(i+1)] = relu_forward(fc_act)
 
+            if self.use_dropout:
+                # drop_act start from 1
+                relu_act, dropout_cache[str(i+1)] = dropout_forward(relu_act, self.dropout_param)
+
             X = relu_act.copy() # Result of one pass through the affine-relu block.
 
             cache = (fc_cache[str(i+1)], relu_cache[str(i+1)])
@@ -341,6 +345,9 @@ class FullyConnectedNet(object):
 
             #print("dx_last.shape=>", dx_last.shape)
             #print("relu_cache.shape=>", relu_cache[str(i+1)].shape)
+            if self.use_dropout:
+                dx_last = dropout_backward(dx_last, dropout_cache[str(i+1)])
+
             drelu = relu_backward(dx_last, relu_cache[str(i+1)])
 
             if self.use_batchnorm:
