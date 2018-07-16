@@ -517,35 +517,6 @@ def conv_forward_naive(x, w, b, conv_param):
 
                     out[i, f, h, width] = conv_single_step(x_padded_sample_slice, w[f, :, :, :], b[f])
 
-    '''
-    stride = conv_param['stride']
-    padding = conv_param['pad']
-
-    N,C,H,W = x.shape
-    F,C,HH,WW = w.shape
-
-    H_OUT = (H - HH + 2*padding) / stride + 1
-    W_OUT = (W - WW + 2*padding) / stride + 1
-
-    if not H_OUT.is_integer() or not W_OUT.is_integer():
-            raise Exception('Invalid output dimension!')
-
-    X_col = im2col_indices(x, HH, WW, padding, stride) # (HH*WW*C x H_slash*W_slash)
-    print("X_col.shape=>", X_col.shape)
-    W_row = w.reshape(F, -1) # (F x HH*WW*C )
-
-    H_slash = int(1+ (H + 2 * padding - HH) / stride)
-    W_slash = int(1+ (W + 2 *padding - WW) / stride)
-
-    print("X_col.shape=>",X_col.shape)
-    print("W_row.shape=>", W_row.shape)
-
-    b = np.repeat(b, H_slash * W_slash).reshape(F, H_slash*W_slash)
-    #print("b.shape=>", b.shape)
-    out = np.dot(W_row, X_col) # (F x H_slash*W_slash)
-    print("out.shape=>", out.shape)
-    out = np.reshape(out, (F, H_slash, W_slash))
-    '''
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
@@ -570,7 +541,61 @@ def conv_backward_naive(dout, cache):
     ###########################################################################
     # TODO: Implement the convolutional backward pass.                        #
     ###########################################################################
-    pass
+    x, w, b, conv_param = cache
+    N, F, Hp, Wp = dout.shape
+    N, C, H, W = x.shape
+    F, C, HH, WW = w.shape
+
+    stride = conv_param['stride']
+    pad = conv_param['pad']
+
+    padded_x = np.pad(x, [(0, 0), (0, 0), (pad, pad), (pad, pad)], mode='constant')
+    db = np.sum(dout, axis=(0, 2, 3))
+    dpadded_x = np.zeros_like(padded_x)
+    dw = np.zeros_like(w)
+
+    for i in range(Hp):
+        for j in range(Wp):
+            dout_ij = dout[:, :, i, j]      # (N, F)
+            input = padded_x[:, :, i*stride:(i*stride+HH), j*stride:(j*stride+WW)]  # (N, C, HH, WW)
+            dw += np.tensordot(dout_ij, input, axes=[0, 0])
+            dpadded_x[:, :, i*stride:(i*stride+HH), j*stride:(j*stride+WW)] += np.tensordot(dout_ij, w, axes=[1, 0])
+
+    dx = dpadded_x[:, :, pad:(-pad), pad:(-pad)]
+    return dx, dw, db
+
+    '''
+    (x, w, b, conv_param) = cache 
+
+    dx = np.zeros(x.shape)
+    dw = np.zeros(w.shape)
+    db = np.zeros(b.shape)
+
+    (N,C,H,W) = x.shape
+    (F,C,HH,WW) = w.shape
+    stride = conv_param['stride']
+    padding = conv_param['pad']
+
+    (N,F, H_OUT, W_OUT) = dout.shape
+
+    padded_x = np.pad(x, [(0, 0), (0, 0), (padding, padding), (padding, padding)], mode='constant')
+    dpadded_x = np.zeros(padded_x.shape)
+
+    for n in range(N):
+        for f in range(F):
+            for c in range(C):
+                for height in range(HH):
+                    for width in range(WW):
+                        vert_start = stride * height
+                        vert_end = stride * height + H_OUT
+                        horiz_start = stride * width
+                        horiz_end = stride * width + W_OUT
+    
+                        # this is 2d volume matrix
+                        x_slice = padded_x[n, c, vert_start:vert_end, horiz_start:horiz_end]
+                        # Element-wise multiply
+                        dw[f, c, height, width] = np.sum(np.multiply(x_slice, dout[n,f,:,:]))
+    '''
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
