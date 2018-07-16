@@ -5,10 +5,18 @@ import numpy as np
 def get_im2col_indices(x_shape, field_height, field_width, padding=1, stride=1):
     # First figure out what the size of the output should be
     N, C, H, W = x_shape
+    print("N=>", N, "C=>", C, "H=>", H, "W=>", W)
+    print("field_height=>", field_height)
+    print("field_width=>", field_width)
+    print("padding=>", padding)
+    print("stride=>", stride)
     assert (H + 2 * padding - field_height) % stride == 0
     assert (W + 2 * padding - field_height) % stride == 0
-    out_height = (H + 2 * padding - field_height) / stride + 1
-    out_width = (W + 2 * padding - field_width) / stride + 1
+    out_height = int((H + 2 * padding - field_height) / stride + 1)
+    out_width = int((W + 2 * padding - field_width) / stride + 1)
+
+    print("out_height=>", out_height)
+    print("out_width=>", out_width)
 
     i0 = np.repeat(np.arange(field_height), field_width)
     i0 = np.tile(i0, C)
@@ -27,14 +35,22 @@ def im2col_indices(x, field_height, field_width, padding=1, stride=1):
     """ An implementation of im2col based on some fancy indexing """
     # Zero-pad the input
     p = padding
+    #print("p=>", p)
+    print("x.shape=>", x.shape)
     x_padded = np.pad(x, ((0, 0), (0, 0), (p, p), (p, p)), mode='constant')
+    print("x_padded.shape=>", x_padded.shape)
+    #print("x_padded=>", x_padded)
 
     k, i, j = get_im2col_indices(x.shape, field_height, field_width, padding,
                                  stride)
-
+    #print("k=>",k,"i=>",i,"j=>",j)
     cols = x_padded[:, k, i, j]
+    print("cols.shape=>", cols.shape)
+    #print("cols=>", cols)
     C = x.shape[1]
     cols = cols.transpose(1, 2, 0).reshape(field_height * field_width * C, -1)
+    print("cols.shape=>", cols.shape)
+
     return cols
 
 

@@ -1,6 +1,7 @@
 from builtins import range
 import numpy as np
-
+#import im2col
+from .im2col import im2col_indices
 
 def affine_forward(x, w, b):
     """
@@ -429,6 +430,15 @@ def dropout_backward(dout, cache):
     return dx
 
 
+def conv_single_step(a_slice_prev, W, b):
+    # Element-wise multiply between W and a_slice_prev. Do not add bias term here.
+    s = np.multiply(W, a_slice_prev)
+    z = np.sum(s)
+
+    # Add bias term
+    z += float(b)
+    return z
+
 def conv_forward_naive(x, w, b, conv_param):
     """
     A naive implementation of the forward pass for a convolutional layer.
@@ -457,7 +467,85 @@ def conv_forward_naive(x, w, b, conv_param):
     # TODO: Implement the convolutional forward pass.                         #
     # Hint: you can use the function np.pad for padding.                      #
     ###########################################################################
-    pass
+    (N,C,H,W) = x.shape
+    (F,C,HH,WW) = w.shape
+    stride = conv_param['stride']
+    padding = conv_param['pad']
+
+    H_OUT = int((H - HH + 2*padding) / stride + 1)
+    W_OUT = int((W - WW + 2*padding) / stride + 1)
+
+    #print("w.shape=>", w.shape)
+    #print("w[0,:]=>", w[0, :])
+    #print("w[1,:]=>", w[1, :])
+    #print("w[2,:]=>", w[2, :])
+
+    #Initialize the out volume with F filters and N points
+    out = np.zeros((N, F, H_OUT, W_OUT))
+    #print("N=>",N)
+    #print("F=>", F)
+    #print("H_OUT=>", H_OUT)
+    #print("W_OUT=>", W_OUT)
+
+    x_padded = np.pad(x, ((0, 0), (0,0), (padding, padding), (padding, padding)), mode = 'constant')
+
+    for i in range(N):
+        x_padded_sample = x_padded[i, :, :, :] # the ith training-sample in minibatch
+        for f in range(F):
+            for h in range(H_OUT):
+                for width in range(W_OUT):
+                    vert_start = stride * h
+                    vert_end = stride * h + HH
+                    horiz_start = stride * width
+                    horiz_end = stride * width + WW
+                    #print("vert_start=>", vert_start)
+                    #print("vert_end=>", vert_end)
+                    #print("horiz_start=>", horiz_start)
+                    #print("horiz_end=>", horiz_end)
+
+                    # this is 3D matrix
+                    #print("x_padded_sample.shape=>", x_padded_sample.shape)
+                    x_padded_sample_slice = x_padded_sample[:, vert_start:vert_end, 
+                                                            horiz_start:horiz_end]
+
+                    # perform single conv step
+                    #print("i=>", i, "f=>", f, "h=>", h, "width=>", width)
+                    #print("x_padded_sample_slice=>", x_padded_sample_slice)
+
+                    #print("w.shape=>", w.shape)
+                    #print("w=>", w[i, : , : ,:])
+
+                    out[i, f, h, width] = conv_single_step(x_padded_sample_slice, w[f, :, :, :], b[f])
+
+    '''
+    stride = conv_param['stride']
+    padding = conv_param['pad']
+
+    N,C,H,W = x.shape
+    F,C,HH,WW = w.shape
+
+    H_OUT = (H - HH + 2*padding) / stride + 1
+    W_OUT = (W - WW + 2*padding) / stride + 1
+
+    if not H_OUT.is_integer() or not W_OUT.is_integer():
+            raise Exception('Invalid output dimension!')
+
+    X_col = im2col_indices(x, HH, WW, padding, stride) # (HH*WW*C x H_slash*W_slash)
+    print("X_col.shape=>", X_col.shape)
+    W_row = w.reshape(F, -1) # (F x HH*WW*C )
+
+    H_slash = int(1+ (H + 2 * padding - HH) / stride)
+    W_slash = int(1+ (W + 2 *padding - WW) / stride)
+
+    print("X_col.shape=>",X_col.shape)
+    print("W_row.shape=>", W_row.shape)
+
+    b = np.repeat(b, H_slash * W_slash).reshape(F, H_slash*W_slash)
+    #print("b.shape=>", b.shape)
+    out = np.dot(W_row, X_col) # (F x H_slash*W_slash)
+    print("out.shape=>", out.shape)
+    out = np.reshape(out, (F, H_slash, W_slash))
+    '''
     ###########################################################################
     #                             END OF YOUR CODE                            #
     ###########################################################################
