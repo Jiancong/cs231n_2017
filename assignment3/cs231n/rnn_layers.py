@@ -2,7 +2,6 @@ from __future__ import print_function, division
 from builtins import range
 import numpy as np
 
-
 """
 This file defines layer types that are commonly used for recurrent neural
 networks.
@@ -43,7 +42,6 @@ def rnn_step_forward(x, prev_h, Wx, Wh, b):
     ##############################################################################
     return next_h, cache
 
-
 def rnn_step_backward(dnext_h, cache):
     """
     Backward pass for a single timestep of a vanilla RNN.
@@ -68,7 +66,7 @@ def rnn_step_backward(dnext_h, cache):
     ##############################################################################
     # next_h.shape: NxH
 
-    print("dnext_h.shape=>", dnext_h.shape) #NxH
+    #print("dnext_h.shape=>", dnext_h.shape) #NxH
     (next_h, prev_h, x, Wx, Wh, b) = cache
 
     dWx = np.dot(x.T, (1 - next_h**2) * dnext_h) # (D,N) * (N,H) =(D,H)
@@ -110,7 +108,22 @@ def rnn_forward(x, h0, Wx, Wh, b):
     # input data. You should use the rnn_step_forward function that you defined  #
     # above. You can use a for loop to help compute the forward pass.            #
     ##############################################################################
-    pass
+    (N, T, D) = x.shape
+    (N, H) = h0.shape
+    #rnn_step_forward(x, prev_h, Wx, Wh, b)
+    cache = []
+    h = np.zeros((N, T, H))
+    hnew = np.transpose(h, (1,0,2)) # (T, N, H)
+
+    h_prev = h0
+    for t in range(T):
+        #cache = (next_h, prev_h, x, Wx, Wh, b)
+        next_h, c = rnn_step_forward(x[:,t,:], h_prev, Wx, Wh, b)
+        h_prev = next_h
+        hnew[t,:,:]= next_h
+        cache.append(c)
+        
+    h = np.transpose(hnew, (1,0,2)) # (N, T, H)
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
@@ -123,6 +136,8 @@ def rnn_backward(dh, cache):
 
     Inputs:
     - dh: Upstream gradients of all hidden states, of shape (N, T, H)
+    - NOTE: this dh[:, t, :] should be considered as the derivative dh to dy
+    - cache: the cache got from rnn_forward
 
     Returns a tuple of:
     - dx: Gradient of inputs, of shape (N, T, D)
@@ -137,7 +152,35 @@ def rnn_backward(dh, cache):
     # sequence of data. You should use the rnn_step_backward function that you   #
     # defined above. You can use a for loop to help compute the backward pass.   #
     ##############################################################################
-    pass
+    (N,T,H) = dh.shape
+    dhtrans = np.transpose(dh, (1,0,2)) # (T, N, H)
+    (next_h, prev_h, x, Wx, Wh, b) = cache[-1]
+    (N,D) = x.shape
+
+    dh0 = np.zeros((N,H)) 
+    dWx = np.zeros((D, H))
+    dWh = np.zeros((H, H))
+    dprev_h = np.zeros((N, H))
+    db = np.zeros((H,))
+    
+    dx = np.zeros((T,N, D)) # (T, N, D)
+    
+    for i in reversed(range(T)):
+        c = cache[i]
+        
+        dtotal_dh = dhtrans[i,:,:]  + dprev_h   #(N,H)
+        #return dx, dprev_h, dWx, dWh, db
+        #cache = (next_h, prev_h, x, Wx, Wh, b)
+        dxi, dprev_h, dWxi, dWhi, dbi = rnn_step_backward(dtotal_dh, c)
+        #print("dx:", dxi, ",dprev_hi:", dprev_hi, ",dWxi:",dWxi, ",dWhi:", dWhi, ",dbi:", dbi)
+        dWx += dWxi
+        dWh += dWhi
+        db += dbi           
+        dx[i,:,:] = dxi
+        
+    dx = np.transpose(dx, (1, 0, 2))
+    dh0 = dprev_h
+
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
