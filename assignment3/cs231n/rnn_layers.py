@@ -186,7 +186,6 @@ def rnn_backward(dh, cache):
     ##############################################################################
     return dx, dh0, dWx, dWh, db
 
-
 def word_embedding_forward(x, W):
     """
     Forward pass for word embeddings. We operate on minibatches of size N where
@@ -195,7 +194,7 @@ def word_embedding_forward(x, W):
 
     Inputs:
     - x: Integer array of shape (N, T) giving indices of words. Each element idx
-      of x muxt be in the range 0 <= idx < V.
+      of x must be in the range 0 <= idx < V.
     - W: Weight matrix of shape (V, D) giving word vectors for all words.
 
     Returns a tuple of:
@@ -208,6 +207,16 @@ def word_embedding_forward(x, W):
     #                                                                            #
     # HINT: This can be done in one line using NumPy's array indexing.           #
     ##############################################################################
+    (N, T) = x.shape
+    (V, D) = W.shape
+
+    x_reshape = x.reshape((N*T))
+    x_onehot = np.zeros((N*T, V))
+    x_onehot[np.arange(N*T), x_reshape] = 1 # [N*T, V]
+
+    out_tmp = np.dot(x_onehot, W) # [N*T, D]
+    out = out_tmp.reshape((N, T, D))
+    cache = (x, W , x_onehot) 
     pass
     ##############################################################################
     #                               END OF YOUR CODE                             #
@@ -237,6 +246,13 @@ def word_embedding_backward(dout, cache):
     # Note that Words can appear more than once in a sequence.                   #
     # HINT: Look up the function np.add.at                                       #
     ##############################################################################
+    (x, W, x_onehot) = cache
+    (N, T) = x.shape
+    (V, D) = W.shape
+
+    dout_reshape = dout.reshape(N*T, D)
+    dW = np.dot(x_onehot.T, dout_reshape)
+
     pass
     ##############################################################################
     #                               END OF YOUR CODE                             #
