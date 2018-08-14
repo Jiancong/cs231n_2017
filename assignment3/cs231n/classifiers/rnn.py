@@ -49,24 +49,24 @@ class CaptioningRNN(object):
         self._end = word_to_idx.get('<END>', None)
 
         # Initialize word vectors
-        self.params['W_embed'] = np.random.randn(vocab_size, wordvec_dim)
+        self.params['W_embed'] = np.random.randn(vocab_size, wordvec_dim) #(V, W)
         self.params['W_embed'] /= 100
 
         # Initialize CNN -> hidden state projection parameters
-        self.params['W_proj'] = np.random.randn(input_dim, hidden_dim)
+        self.params['W_proj'] = np.random.randn(input_dim, hidden_dim) # (D, H)
         self.params['W_proj'] /= np.sqrt(input_dim)
-        self.params['b_proj'] = np.zeros(hidden_dim)
+        self.params['b_proj'] = np.zeros(hidden_dim) # (H)
 
         # Initialize parameters for the RNN
         dim_mul = {'lstm': 4, 'rnn': 1}[cell_type]
-        self.params['Wx'] = np.random.randn(wordvec_dim, dim_mul * hidden_dim)
+        self.params['Wx'] = np.random.randn(wordvec_dim, dim_mul * hidden_dim) #(W, H)
         self.params['Wx'] /= np.sqrt(wordvec_dim)
-        self.params['Wh'] = np.random.randn(hidden_dim, dim_mul * hidden_dim)
+        self.params['Wh'] = np.random.randn(hidden_dim, dim_mul * hidden_dim) #(H, H)
         self.params['Wh'] /= np.sqrt(hidden_dim)
         self.params['b'] = np.zeros(dim_mul * hidden_dim)
 
         # Initialize output to vocab weights
-        self.params['W_vocab'] = np.random.randn(hidden_dim, vocab_size)
+        self.params['W_vocab'] = np.random.randn(hidden_dim, vocab_size) #(H, V)
         self.params['W_vocab'] /= np.sqrt(hidden_dim)
         self.params['b_vocab'] = np.zeros(vocab_size)
 
@@ -107,13 +107,13 @@ class CaptioningRNN(object):
         W_proj, b_proj = self.params['W_proj'], self.params['b_proj']
 
         # Word embedding matrix
-        W_embed = self.params['W_embed']
+        W_embed = self.params['W_embed'] #(V, W)
 
         # Input-to-hidden, hidden-to-hidden, and biases for the RNN
         Wx, Wh, b = self.params['Wx'], self.params['Wh'], self.params['b']
 
         # Weight and bias for the hidden-to-vocab transformation.
-        W_vocab, b_vocab = self.params['W_vocab'], self.params['b_vocab']
+        W_vocab, b_vocab = self.params['W_vocab'], self.params['b_vocab'] #
 
         loss, grads = 0.0, {}
         ############################################################################
@@ -137,6 +137,35 @@ class CaptioningRNN(object):
         # defined above to store loss and gradients; grads[k] should give the      #
         # gradients for self.params[k].                                            #
         ############################################################################
+        (N, D) = features.shape # 
+        h0, cache0 = affine_forward(features, W_proj, b_proj)  #(N,H)
+
+        (V) = b_vocab.shape
+        (N, T) = captions.shape
+
+        h1, cache1 = word_embedding_forward(captions_in, W_embed) # h:(N, T, W)
+        if self.cell_type == 'rnn' :
+           h2, cache2 = rnn_forward(h1, h0, Wx, Wh, b)  #h2:(N, T, H)          
+
+        out3, cache3 = temporal_affine_forward(h2, W_vocab, b_vocab) #(N, T, V)
+
+        loss, dout3 = temporal_softmax_loss(out3, captions_out, mask, verbose=False) #(N, T, V)
+
+        # grads
+        dh2, dW_vocab, db_vocab = temporal_affine_backward(dout3, cache3)
+        if self.cell_type == 'rnn' :
+            dh1, dh0, dWx, dWh, db = rnn_backward(dh2, cache2) 
+
+        dW_embed = word_embedding_backward(dh1, cache1)
+
+        dfeatures, dW_proj, db_proj = affine_backward(dh0, cache0)
+        grads['W_proj'] = dW_proj
+        grads['b_proj'] = db_proj
+        grads['Wx'] = dWx
+        grads['Wh'] = dWh
+        grads['b'] = db
+        grads['W_vocab'] = dW_vocab
+        grads['b_vocab'] = db_vocab
         pass
         ############################################################################
         #                             END OF YOUR CODE                             #
