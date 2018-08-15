@@ -166,6 +166,7 @@ class CaptioningRNN(object):
         grads['b'] = db
         grads['W_vocab'] = dW_vocab
         grads['b_vocab'] = db_vocab
+        grads['W_embed'] = dW_embed
         pass
         ############################################################################
         #                             END OF YOUR CODE                             #
