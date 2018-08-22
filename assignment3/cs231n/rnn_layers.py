@@ -35,8 +35,6 @@ def rnn_step_forward(x, prev_h, Wx, Wh, b):
     ##############################################################################
     next_h = np.tanh(np.dot(prev_h,Wh)+ np.dot(x, Wx) + b)
     cache = (next_h, prev_h, x, Wx, Wh, b)
-    
-    #print("next_h.shape=>", next_h.shape)
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
@@ -64,9 +62,6 @@ def rnn_step_backward(dnext_h, cache):
     # HINT: For the tanh function, you can compute the local derivative in terms #
     # of the output value from tanh.                                             #
     ##############################################################################
-    # next_h.shape: NxH
-
-    #print("dnext_h.shape=>", dnext_h.shape) #NxH
     (next_h, prev_h, x, Wx, Wh, b) = cache
 
     dWx = np.dot(x.T, (1 - next_h**2) * dnext_h) # (D,N) * (N,H) =(D,H)
@@ -300,7 +295,7 @@ def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b):
     # You may want to use the numerically stable sigmoid implementation above.  #
     #############################################################################
     (N,H)= prev_c.shape
-    a = np.dot(x, Wx)+np.dot(prev_h, Wh) +b  #(N, 4H)+ (N,4H)
+    a = np.dot(x, Wx) + np.dot(prev_h, Wh) + b.T  #(N, 4H)+ (N,4H) + (4H,)
     ai = a[:, :H]
     af = a[:, H:2*H]
     ao = a[:, 2*H:3*H]
@@ -311,11 +306,10 @@ def lstm_step_forward(x, prev_h, prev_c, Wx, Wh, b):
     g = np.tanh(ag)
     next_c = f * prev_c + i * g
     next_h = o * np.tanh(next_c) 
-    pass
+    cache = [x, Wx, Wh, b, prev_c, prev_h, next_c, next_h, i, f, o, g]
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
-
     return next_h, next_c, cache
 
 
@@ -343,6 +337,39 @@ def lstm_step_backward(dnext_h, dnext_c, cache):
     # HINT: For sigmoid and tanh you can compute local derivatives in terms of  #
     # the output value from the nonlinearity.                                   #
     #############################################################################
+    (x, Wx, Wh, b, prev_c, prev_h, next_c, next_h, i, f, o, g) = cache
+
+    # many of this gradients contribute in 2 ways, once via next_c, once
+    # via next_h. here we call those paths 1 and 2, just for clarity.
+    alt_dnext_h = dnext_h*o*(1-np.power(np.tanh(next_c), 2)) 
+    dS1 = dnext_c
+    dS1 += alt_dnext_h
+    dprev_c = f*dS1
+
+    di = dS1*g
+    dg = dS1*i
+
+    do = dnext_h * np.tanh(next_c)
+    df = dS1 * prev_c
+
+    # backprop dsigmoid(x) = sigmoid(x)*(1-sigmoid(x))
+    # backprop dtanh(x) = 1-np.power(tanh(x), 2)
+    da_i = di * i * (1-i)
+    da_g = dg * (1-np.power(g, 2))
+    da_f = df * f * (1-f)
+    da_o = do * o * (1-o)
+
+    # remember a is just the concatenation of a_i, a_f, a_o, a_g
+    da = np.hstack((da_i, da_f, da_o, da_g))
+    print("da.shape=>", da.shape)
+
+    dWx = np.dot(x.T, da)  #(D,N) * (N,4H) = (D, 4H)
+    dWh = np.dot(prev_h.T, da) #(H,N) * (N,4H) = (H, 4H)
+    print("da.T.shape=>", da.T.shape)
+    db = np.sum(da.T, axis=1) #(4H,) = (N,4H).T
+    dx = np.dot(da, Wx.T) #(N,D) = (N,4H) (D,4H)
+
+    dprev_h = np.dot(da , Wh.T) #(N,4H) * (H,4H)
     pass
     ##############################################################################
     #                               END OF YOUR CODE                             #
