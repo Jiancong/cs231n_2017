@@ -145,7 +145,9 @@ class CaptioningRNN(object):
 
         h1, cache1 = word_embedding_forward(captions_in, W_embed) # h:(N, T, W)
         if self.cell_type == 'rnn' :
-           h2, cache2 = rnn_forward(h1, h0, Wx, Wh, b)  #h2:(N, T, H)          
+            h2, cache2 = rnn_forward(h1, h0, Wx, Wh, b)  #h2:(N, T, H)          
+        else:
+            h2, cache2 = lstm_forward(h1, h0, Wx, Wh, b)
 
         out3, cache3 = temporal_affine_forward(h2, W_vocab, b_vocab) #(N, T, V)
 
@@ -155,6 +157,8 @@ class CaptioningRNN(object):
         dh2, dW_vocab, db_vocab = temporal_affine_backward(dout3, cache3)
         if self.cell_type == 'rnn' :
             dh1, dh0, dWx, dWh, db = rnn_backward(dh2, cache2) 
+        else:
+            dh1, dh0, dWx, dWh, db = lstm_backward(dh2, cache2) 
 
         dW_embed = word_embedding_backward(dh1, cache1)
 
@@ -237,6 +241,10 @@ class CaptioningRNN(object):
         # sample the first word
         captions_in[:, 0] = self._start
 
+        next_h = h0
+        if self.cell_type == 'lstm':
+            next_c =np.zeros_like(next_h)
+
         for i in range(max_length-1) :
             x, _ = word_embedding_forward(captions_in, W_embed) # h:(N, T, W)
             if self.cell_type == 'rnn' :
@@ -244,11 +252,9 @@ class CaptioningRNN(object):
                 #print("x.shape=>", x.shape)
                 #print("Wx.shape=>", Wx.shape)
                 #print("Wh.shape=>", Wh.shape)
-                if i == 0:
-                    next_h, _ = rnn_step_forward(x[:, i, :], h0, Wx, Wh, b) # (N, H)
-                else:
-                    next_h, _ = rnn_step_forward(x[:, i, :], next_h, Wx, Wh, b)
-                
+                next_h, _ = rnn_step_forward(x[:, i, :], next_h, Wx, Wh, b)
+            else:
+                next_h, next_c, _ = lstm_step_forward(x[:, i, :], next_h, next_c, Wx, Wh ,b) 
             out3, _= affine_forward(next_h, W_vocab, b_vocab) #(N, V)
             sindexarray = np.argmax(out3, axis=1) #(N, )
             captions_out[:, i] = sindexarray
