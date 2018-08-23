@@ -361,11 +361,11 @@ def lstm_step_backward(dnext_h, dnext_c, cache):
 
     # remember a is just the concatenation of a_i, a_f, a_o, a_g
     da = np.hstack((da_i, da_f, da_o, da_g))
-    print("da.shape=>", da.shape)
+    #print("da.shape=>", da.shape)
 
     dWx = np.dot(x.T, da)  #(D,N) * (N,4H) = (D, 4H)
     dWh = np.dot(prev_h.T, da) #(H,N) * (N,4H) = (H, 4H)
-    print("da.T.shape=>", da.T.shape)
+    #print("da.T.shape=>", da.T.shape)
     db = np.sum(da.T, axis=1) #(4H,) = (N,4H).T
     dx = np.dot(da, Wx.T) #(N,D) = (N,4H) (D,4H)
 
@@ -451,7 +451,35 @@ def lstm_backward(dh, cache):
     # TODO: Implement the backward pass for an LSTM over an entire timeseries.  #
     # You should use the lstm_step_backward function that you just defined.     #
     #############################################################################
+    (N, T, H) = dh.shape
+    dhtrans = np.transpose(dh, (1, 0,2)) # (T, N, H)
+    (x, Wx, Wh, b, prev_c, prev_h, next_c, next_h, i, f, o, g) = cache[-1]
+    (N,D) =x.shape 
+
+    dh0 = np.zeros((N,H))
+    dWx = np.zeros((D,4*H))
+    dWh = np.zeros((H,4*H))
+    db = np.zeros((4*H,))
+    dprev_c = np.zeros((N, H))
+    dprev_h = np.zeros((N, H))
+
+    dx = np.zeros((T, N , D ))
+
+    dnext_c = dprev_c.copy()
+    
+    for i in reversed(range(T)):
+        c = cache[i]
+        dnext_h = (dhtrans[i,:,:]  + dprev_h).copy()
+        dxi, dprev_h, dprev_c, dWxi, dWhi, dbi = lstm_step_backward(dnext_h, dnext_c, c)
+        dx[i,:,:] = dxi
+        dnext_c = dprev_c
+        
+        dWx += dWxi
+        dWh += dWhi
+        db += dbi
     pass
+    dx = np.transpose(dx, (1, 0, 2))
+    dh0 = dprev_h
     ##############################################################################
     #                               END OF YOUR CODE                             #
     ##############################################################################
